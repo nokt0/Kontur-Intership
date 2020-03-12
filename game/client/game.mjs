@@ -1,20 +1,92 @@
-
-let adjacencyMatrix;
-export function startGame(levelMap, gameState) {
-    adjacencyMatrix = createAdjacencyMatrix(levelMap);
-    
-}
-
-export function getNextCommand(gameState) {
-    console.log(bfs(adjacencyMatrix[12][10], 1, 9));
-    return 'WAIT';
-}
-
 const LAND = '#';
 const WATER = '~';
 const PORT = 'O';
 const HOME = 'H';
+const SHIP_VOLUME = 368;
 
+let adjacencyMatrix;
+let moveCount = 0;
+
+let ShipState = {
+    moves: false,
+    route: []
+}
+
+export function startGame(levelMap, gameState) {
+    adjacencyMatrix = createAdjacencyMatrix(levelMap);
+
+}
+
+export function getNextCommand(gameState) {
+    let ship = gameState.ship;
+    let homePort = gameState.ports.filter(p => {
+        return p.isHome && p.x === ship.x
+            && p.y === ship.y;
+    })[0];
+    let sellPort = gameState.ports.filter(p => {
+        return !p.isHome;
+    })
+
+    if (!ShipState.moves && ship.goods.length === 0) {
+
+        let goods = [...gameState.goodsInPort];
+        let goodsCount = Math.floor(SHIP_VOLUME / goods[0].volume);
+        let goodForLoad = goods[0];
+        if (goodForLoad.ammount < goodsCount) {
+            goodsCount = goodForLoad.ammount;
+        }
+
+        ShipState.route = bfs(adjacencyMatrix[ship.y][ship.x], sellPort[0].y, sellPort[0].x);
+        ShipState.moves = true;
+        moveCount++;
+        return `LOAD ${goodForLoad.name} ${goodsCount}`
+    }
+    if (ShipState.moves) {
+        moveCount++;
+        return getShipMove(ship);
+    }
+    if (ship.goods.length !== 0 && !ShipState.moves) {
+        if (ship.x == sellPort[0].x && ship.y == sellPort[0].y) {
+            ShipState.route = bfs(adjacencyMatrix[ship.y][ship.x],homePort.y,homePort.x);
+            ShipState.moves = true;
+            moveCount++;
+            return `LOAD ${ship.goods[0].name} ${ship.goods[0].amount}`;
+        }
+    }
+    console.log(gameState);
+    moveCount++;
+    return 'WAIT';
+}
+
+function getShipMove(ship) {
+    if (ShipState.route.length == 0) {
+        ShipState.moves = false;
+        console.log("Route ended");
+        return 'WAIT';
+    }
+    let nodeToMove = ShipState.route.shift();
+    let xDifference = nodeToMove.x - ship.x;
+    let yDifference = nodeToMove.y - ship.y;
+    if (Math.abs(xDifference) > 1 || Math.abs(yDifference) > 1
+        || (Math.abs(xDifference) === 1 && Math.abs(yDifference) === 1)) {
+        console.log("Wrong Route")
+        throw new Error("Wrong Route");
+    }
+    else {
+        if (xDifference > 0) {
+            return 'E';
+        }
+        if (xDifference < 0) {
+            return 'W';
+        }
+        if (yDifference > 0) {
+            return 'N';
+        }
+        if (yDifference < 0) {
+            return 'S';
+        }
+    }
+}
 
 class Node {
     constructor(y, x, type) {
@@ -30,10 +102,10 @@ class Node {
     }
 }
 
-function bfs(startNode, targetX, targetY) {
+function bfs(startNode, targetY, targetX) {
     let collection = [startNode];
     let previousMap = new Map();
-    
+
 
     while (collection.length) {
         let node = collection.shift()
@@ -43,11 +115,11 @@ function bfs(startNode, targetX, targetY) {
                 child.visited = true;
                 collection.push(child);
                 previousMap.set(child, node);
-                
+
             }
         }
     }
-    previousMap.set(startNode,null);    
+    previousMap.set(startNode, null);
     let targetNode = adjacencyMatrix[targetY][targetX];
     if (!targetNode.visited) {
         console.log("No path");
