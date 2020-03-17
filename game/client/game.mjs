@@ -1,182 +1,245 @@
+/* eslint-disable no-console */
 const LAND = '#';
-const WATER = '~';
-const PORT = 'O';
-const HOME = 'H';
 const SHIP_VOLUME = 368;
 
-let adjacencyMatrix;
-let moveCount = 0;
+let coordinateMatrix;
+let homePort;
+let sellPorts;
+let moveCounter;
+let shipState;
 
-let ShipState = {
-    moves: false,
-    route: []
+class Node {
+  constructor(y, x, type) {
+    this.y = y;
+    this.x = x;
+    this.type = type;
+    this.children = [];
+    this.visited = false;
+  }
+
+  add(node) {
+    this.children.push(node);
+  }
 }
 
-export function startGame(levelMap, gameState) {
-    adjacencyMatrix = createAdjacencyMatrix(levelMap);
+function checkState() {
+  const {
+    moves, route, inHome, inPort,
+  } = shipState;
 
+  if (homePort && inPort !== inHome && (moves !== true || route.length !== 0)) {
+    return true;
+  }
+  return false;
 }
 
-export function getNextCommand(gameState) {
-    let ship = gameState.ship;
-    let homePort = gameState.ports.filter(p => {
-        return p.isHome && p.x === ship.x
-            && p.y === ship.y;
-    })[0];
-    let sellPort = gameState.ports.filter(p => {
-        return !p.isHome;
-    })
 
-    if (!ShipState.moves && ship.goods.length === 0) {
+function createCoordinateMatrix(mapString) {
+  let mapStr = mapString;
+  const columnCount = mapString.indexOf('\n');
+  const rowCount = mapString.match(/\n/g).length + 1;
+  console.log(rowCount);
 
-        let goods = [...gameState.goodsInPort];
-        let goodsCount = Math.floor(SHIP_VOLUME / goods[0].volume);
-        let goodForLoad = goods[0];
-        if (goodForLoad.ammount < goodsCount) {
-            goodsCount = goodForLoad.ammount;
-        }
+  const map = [];
+  for (let y = 0; y < rowCount; y += 1) {
+    map[y] = [];
+    for (let x = 0; x < columnCount; x += 1) {
+      map[y][x] = -1;
+    }
+  }
 
-        ShipState.route = bfs(adjacencyMatrix[ship.y][ship.x], sellPort[0].y, sellPort[0].x);
-        ShipState.moves = true;
-        moveCount++;
-        return `LOAD ${goodForLoad.name} ${goodsCount}`
+  mapStr = mapStr.replace(/\n/gim, '');
+
+  for (let y = 0; y < rowCount; y += 1) {
+    for (let x = 0; x < columnCount; x += 1) {
+      const symbol = mapStr.charAt(x + y * columnCount);
+      const node = new Node(y, x, symbol);
+      map[y][x] = node;
     }
-    if (ShipState.moves) {
-        moveCount++;
-        return getShipMove(ship);
+  }
+
+  for (let y = 0; y < rowCount; y += 1) {
+    for (let x = 0; x < columnCount; x += 1) {
+      if (map[y][x].type === LAND) {
+        continue;
+      }
+      if (x !== 0 && map[y][x - 1].type !== LAND) {
+        map[y][x].add(map[y][x - 1]);
+      }
+      if (x !== columnCount - 1 && map[y][x + 1].type !== LAND) {
+        map[y][x].add(map[y][x + 1]);
+      }
+      if (y !== 0 && map[y - 1][x].type !== LAND) {
+        map[y][x].add(map[y - 1][x]);
+      }
+      if (y !== rowCount - 1 && map[y + 1][x].type !== LAND) {
+        map[y][x].add(map[y + 1][x]);
+      }
     }
-    if (ship.goods.length !== 0 && !ShipState.moves) {
-        if (ship.x == sellPort[0].x && ship.y == sellPort[0].y) {
-            ShipState.route = bfs(adjacencyMatrix[ship.y][ship.x],homePort.y,homePort.x);
-            ShipState.moves = true;
-            moveCount++;
-            return `LOAD ${ship.goods[0].name} ${ship.goods[0].amount}`;
-        }
-    }
-    console.log(gameState);
-    moveCount++;
-    return 'WAIT';
+  }
+  console.log(map);
+
+  return map;
 }
 
 function getShipMove(ship) {
-    if (ShipState.route.length == 0) {
-        ShipState.moves = false;
-        console.log("Route ended");
-        return 'WAIT';
-    }
-    let nodeToMove = ShipState.route.shift();
-    let xDifference = nodeToMove.x - ship.x;
-    let yDifference = nodeToMove.y - ship.y;
-    if (Math.abs(xDifference) > 1 || Math.abs(yDifference) > 1
-        || (Math.abs(xDifference) === 1 && Math.abs(yDifference) === 1)) {
-        console.log("Wrong Route")
-        throw new Error("Wrong Route");
-    }
-    else {
-        if (xDifference > 0) {
-            return 'E';
-        }
-        if (xDifference < 0) {
-            return 'W';
-        }
-        if (yDifference > 0) {
-            return 'N';
-        }
-        if (yDifference < 0) {
-            return 'S';
-        }
-    }
-}
+  const { route } = shipState;
 
-class Node {
-    constructor(y, x, type) {
-        this.y = y;
-        this.x = x;
-        this.type = type;
-        this.children = [];
-        this.visited = false;
-    }
+  if (route.length === 0) {
+    shipState.moves = false;
+    throw new Error('Route end');
+  }
 
-    add(node) {
-        this.children.push(node);
+  const nodeToMove = shipState.route.shift();
+  if (route.length === 0) {
+    shipState.moves = false;
+  }
+  const xDifference = nodeToMove.x - ship.x;
+  const yDifference = nodeToMove.y - ship.y;
+  if (
+    Math.abs(xDifference) > 1
+        || Math.abs(yDifference) > 1
+        || (Math.abs(xDifference) === 1 && Math.abs(yDifference) === 1)
+  ) {
+    console.log('Wrong Route node');
+    throw new Error('Wrong Route node');
+  } else {
+    if (xDifference > 0) {
+      return 'E';
     }
+    if (xDifference < 0) {
+      return 'W';
+    }
+    if (yDifference > 0) {
+      return 'S';
+    }
+    if (yDifference < 0) {
+      return 'N';
+    }
+  }
+
+  return 'WAIT';
 }
 
 function bfs(startNode, targetY, targetX) {
-    let collection = [startNode];
-    let previousMap = new Map();
+  function resetVisited() {
+    coordinateMatrix.forEach((row) => {
+      row.forEach((column) => {
+        column.visited = false;
+      });
+    });
+  }
 
+  const collection = [startNode];
+  const previousMap = new Map();
 
-    while (collection.length) {
-        let node = collection.shift()
+  while (collection.length) {
+    const node = collection.shift();
 
-        for (let child of node.children) {
-            if (child && !child.visited) {
-                child.visited = true;
-                collection.push(child);
-                previousMap.set(child, node);
-
-            }
-        }
+    for (const child of node.children) {
+      if (child && !child.visited) {
+        child.visited = true;
+        collection.push(child);
+        previousMap.set(child, node);
+      }
     }
-    previousMap.set(startNode, null);
-    let targetNode = adjacencyMatrix[targetY][targetX];
-    if (!targetNode.visited) {
-        console.log("No path");
-        return undefined;
-    } else {
-        let path = [];
-        for (let nd = targetNode; nd != null; nd = previousMap.get(nd))
-            path.push(nd);
-        path = path.reverse();
-        return path;
-    }
+  }
+  previousMap.set(startNode, null);
+  const targetNode = coordinateMatrix[targetY][targetX];
+  if (!targetNode.visited) {
+    console.log('No path');
+    return undefined;
+  }
+  let path = [];
+  for (let nd = targetNode; nd != null; nd = previousMap.get(nd)) {
+    path.push(nd);
+  }
+  path = path.reverse();
+  path.shift(); /* Удаляем первый узел, так как это точка в которой начинается маршрут,
+                      а нам нужно плыть в следующий узел */
+  resetVisited();
+  return path;
 }
 
-function createAdjacencyMatrix(mapString) {
-    let mapStr = mapString;
-    const columnCount = mapString.indexOf('\n');
-    const rowCount = mapString.match(/\n/g).length + 1;
-    console.log(rowCount, columnCount);
+export function startGame(levelMap, gameState) {
+  coordinateMatrix = createCoordinateMatrix(levelMap);
+  moveCounter = 0;
+  shipState = {
+    moves: false,
+    route: [],
+    inHome: false,
+    inPort: false,
+    homePort: undefined,
+  };
+  const { ports } = gameState;
 
-    let map = [];
-    for (let y = 0; y < rowCount; y++) {
-        map[y] = [];
-        for (let x = 0; x < columnCount; x++) {
-            map[y][x] = -1;
-        }
+  homePort = ports
+    .filter((p) => p.isHome)
+    .shift();
+
+  sellPorts = ports.filter((p) => !p.isHome);
+
+  console.log(homePort, sellPorts);
+}
+
+export function getNextCommand(gameState) {
+  const { ship } = gameState;
+
+  console.log(shipState);
+
+  function checkShipCoordinates(x, y) {
+    return ship.x === x && ship.y === y;
+  }
+
+  checkShipCoordinates(homePort.x, homePort.y)
+    ? (shipState.inHome = true)
+    : (shipState.inHome = false);
+
+  if (sellPorts.some((p) => checkShipCoordinates(p.x, p.y))) {
+    shipState.inPort = true;
+    shipState.inHome = false;
+  } else {
+    shipState.inPort = false;
+  }
+
+  if (!checkState) {
+    throw new Error('Wrong State');
+  }
+
+  if (shipState.moves) {
+    moveCounter += 1;
+    return getShipMove(ship);
+  }
+
+  if (ship.goods.length === 0 && shipState.inHome) {
+    const goods = [...gameState.goodsInPort];
+    let goodsCount = Math.floor(SHIP_VOLUME / goods[0].volume);
+    const goodForLoad = goods[0];
+    if (goodForLoad.ammount < goodsCount) {
+      goodsCount = goodForLoad.ammount;
     }
+    shipState.route = bfs(
+      coordinateMatrix[ship.y][ship.x],
+      sellPorts[0].y,
+      sellPorts[0].x,
+    );
+    shipState.moves = true;
+    moveCounter += 1;
+    return `LOAD ${goodForLoad.name} ${goodsCount}`;
+  }
+  if (shipState.inPort) {
+    shipState.route = bfs(
+      coordinateMatrix[ship.y][ship.x],
+      homePort.y,
+      homePort.x,
+    );
+    shipState.moves = true;
+    moveCounter += 1;
+    return `SELL ${ship.goods[0].name} ${ship.goods[0].amount}`;
+  }
 
-    mapStr = mapStr.replace(/\n/gim, '');
 
-    for (let y = 0; y < rowCount; y++) {
-        for (let x = 0; x < columnCount; x++) {
-            let symbol = mapStr.charAt(x + y * rowCount);
-            let node = new Node(y, x, symbol);
-            map[y][x] = node;
-        }
-    }
-
-    for (let y = 0; y < rowCount; y++) {
-        for (let x = 0; x < columnCount; x++) {
-            if (map[y][x].type == LAND) {
-                continue;
-            }
-            if (x != 0 && map[y][x - 1].type != LAND) {
-                map[y][x].add(map[y][x - 1]);
-            }
-            if (x != columnCount - 1 && map[y][x + 1].type != LAND) {
-                map[y][x].add(map[y][x + 1])
-            }
-            if (y != 0 && map[y - 1][x].type != LAND) {
-                map[y][x].add(map[y - 1][x]);
-            }
-            if (y != rowCount - 1 && map[y + 1][x].type != LAND) {
-                map[y][x].add(map[y + 1][x]);
-            }
-        }
-    }
-    console.log(map)
-
-    return map;
+  console.log(gameState);
+  moveCounter += 1;
+  return 'WAIT';
 }
