@@ -7,6 +7,7 @@ let homePort;
 let sellPorts;
 let moveCounter;
 let shipState;
+let pathsHomeToPort;
 
 class Node {
   constructor(y, x, type) {
@@ -38,7 +39,6 @@ function createCoordinateMatrix(mapString) {
   let mapStr = mapString;
   const columnCount = mapString.indexOf('\n');
   const rowCount = mapString.match(/\n/g).length + 1;
-  console.log(rowCount);
 
   const map = [];
   for (let y = 0; y < rowCount; y += 1) {
@@ -155,8 +155,7 @@ function bfs(startNode, targetY, targetX) {
     path.push(nd);
   }
   path = path.reverse();
-  path.shift(); /* Удаляем первый узел, так как это точка в которой начинается маршрут,
-                      а нам нужно плыть в следующий узел */
+
   resetVisited();
   return path;
 }
@@ -171,15 +170,26 @@ export function startGame(levelMap, gameState) {
     inPort: false,
     homePort: undefined,
   };
-  const { ports } = gameState;
 
+  const { ports } = gameState;
   homePort = ports
     .filter((p) => p.isHome)
     .shift();
 
+  pathsHomeToPort = [gameState.ports.length];
+
+  // Кешируем пути от дома до каждого порта и сохраняем в матрицу по номеру id
+  gameState.ports.forEach((port) => {
+    const { x } = homePort;
+    const { y } = homePort;
+    pathsHomeToPort[port.portId] = bfs(coordinateMatrix[y][x], port.y, port.x);
+  });
+
   sellPorts = ports.filter((p) => !p.isHome);
 
   console.log(homePort, sellPorts);
+  console.log(gameState.prices);
+  console.log(pathsHomeToPort);
 }
 
 export function getNextCommand(gameState) {
@@ -218,26 +228,23 @@ export function getNextCommand(gameState) {
     if (goodForLoad.ammount < goodsCount) {
       goodsCount = goodForLoad.ammount;
     }
-    shipState.route = bfs(
-      coordinateMatrix[ship.y][ship.x],
-      sellPorts[0].y,
-      sellPorts[0].x,
-    );
+    /** Присваеваем закешированный маршрут,убирая первый узел,
+     * так как это домашний порт. */
+    shipState.route = [...pathsHomeToPort[sellPorts[0].portId]];
+    shipState.route.shift();
     shipState.moves = true;
     moveCounter += 1;
     return `LOAD ${goodForLoad.name} ${goodsCount}`;
   }
   if (shipState.inPort) {
-    shipState.route = bfs(
-      coordinateMatrix[ship.y][ship.x],
-      homePort.y,
-      homePort.x,
-    );
+    /** Присваеваем закешированный маршрут и делаем reverse,
+     *  так как нам нужно наоборот вернуться в домашний порт. */
+    shipState.route = [...pathsHomeToPort[sellPorts[0].portId]].reverse();
+    shipState.route.shift();
     shipState.moves = true;
     moveCounter += 1;
     return `SELL ${ship.goods[0].name} ${ship.goods[0].amount}`;
   }
-
 
   console.log(gameState);
   moveCounter += 1;
