@@ -8,6 +8,7 @@ let sellPorts;
 let moveCounter;
 let shipState;
 let pathsHomeToPort;
+let profitableCoefficient;
 
 class Node {
   constructor(y, x, type) {
@@ -60,20 +61,19 @@ function createCoordinateMatrix(mapString) {
 
   for (let y = 0; y < rowCount; y += 1) {
     for (let x = 0; x < columnCount; x += 1) {
-      if (map[y][x].type === LAND) {
-        continue;
-      }
-      if (x !== 0 && map[y][x - 1].type !== LAND) {
-        map[y][x].add(map[y][x - 1]);
-      }
-      if (x !== columnCount - 1 && map[y][x + 1].type !== LAND) {
-        map[y][x].add(map[y][x + 1]);
-      }
-      if (y !== 0 && map[y - 1][x].type !== LAND) {
-        map[y][x].add(map[y - 1][x]);
-      }
-      if (y !== rowCount - 1 && map[y + 1][x].type !== LAND) {
-        map[y][x].add(map[y + 1][x]);
+      if (map[y][x].type !== LAND) {
+        if (x !== 0 && map[y][x - 1].type !== LAND) {
+          map[y][x].add(map[y][x - 1]);
+        }
+        if (x !== columnCount - 1 && map[y][x + 1].type !== LAND) {
+          map[y][x].add(map[y][x + 1]);
+        }
+        if (y !== 0 && map[y - 1][x].type !== LAND) {
+          map[y][x].add(map[y - 1][x]);
+        }
+        if (y !== rowCount - 1 && map[y + 1][x].type !== LAND) {
+          map[y][x].add(map[y + 1][x]);
+        }
       }
     }
   }
@@ -118,7 +118,7 @@ function getShipMove(ship) {
     }
   }
 
-  return 'WAIT';
+  throw new Error('WAIT Not Expected');
 }
 
 function bfs(startNode, targetY, targetX) {
@@ -160,6 +160,11 @@ function bfs(startNode, targetY, targetX) {
   return path;
 }
 
+function calculateProfitableCoefficient() {
+
+
+}
+
 export function startGame(levelMap, gameState) {
   coordinateMatrix = createCoordinateMatrix(levelMap);
   moveCounter = 0;
@@ -178,14 +183,14 @@ export function startGame(levelMap, gameState) {
 
   pathsHomeToPort = [gameState.ports.length];
 
-  // Кешируем пути от дома до каждого порта и сохраняем в матрицу по номеру id
-  gameState.ports.forEach((port) => {
+  sellPorts = ports.filter((p) => !p.isHome);
+
+  // Кешируем пути от дома до каждого порта и сохраняем в матрицу по id порта
+  sellPorts.forEach((port) => {
     const { x } = homePort;
     const { y } = homePort;
     pathsHomeToPort[port.portId] = bfs(coordinateMatrix[y][x], port.y, port.x);
   });
-
-  sellPorts = ports.filter((p) => !p.isHome);
 
   console.log(homePort, sellPorts);
   console.log(gameState.prices);
@@ -201,9 +206,11 @@ export function getNextCommand(gameState) {
     return ship.x === x && ship.y === y;
   }
 
-  checkShipCoordinates(homePort.x, homePort.y)
-    ? (shipState.inHome = true)
-    : (shipState.inHome = false);
+  if (checkShipCoordinates(homePort.x, homePort.y)) {
+    shipState.inHome = true;
+  } else {
+    shipState.inHome = false;
+  }
 
   if (sellPorts.some((p) => checkShipCoordinates(p.x, p.y))) {
     shipState.inPort = true;
@@ -228,8 +235,8 @@ export function getNextCommand(gameState) {
     if (goodForLoad.ammount < goodsCount) {
       goodsCount = goodForLoad.ammount;
     }
-    /** Присваеваем закешированный маршрут,убирая первый узел,
-     * так как это домашний порт. */
+    /* Присваеваем закешированный маршрут,убирая первый узел,
+       так как это домашний порт. */
     shipState.route = [...pathsHomeToPort[sellPorts[0].portId]];
     shipState.route.shift();
     shipState.moves = true;
@@ -237,8 +244,8 @@ export function getNextCommand(gameState) {
     return `LOAD ${goodForLoad.name} ${goodsCount}`;
   }
   if (shipState.inPort) {
-    /** Присваеваем закешированный маршрут и делаем reverse,
-     *  так как нам нужно наоборот вернуться в домашний порт. */
+    /* Присваеваем закешированный маршрут и делаем reverse,
+       так как нам нужно наоборот вернуться в домашний порт. */
     shipState.route = [...pathsHomeToPort[sellPorts[0].portId]].reverse();
     shipState.route.shift();
     shipState.moves = true;
@@ -248,5 +255,5 @@ export function getNextCommand(gameState) {
 
   console.log(gameState);
   moveCounter += 1;
-  return 'WAIT';
+  throw new Error('WAIT Not Expected');
 }
