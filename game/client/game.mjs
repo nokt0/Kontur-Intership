@@ -41,19 +41,23 @@ function checkState() {
   return false;
 }
 
+function createMatrix(rowCount, columnCount) {
+  const matrix = [];
+  for (let y = 0; y < rowCount; y += 1) {
+    matrix[y] = [];
+    for (let x = 0; x < columnCount; x += 1) {
+      matrix[y][x] = -1;
+    }
+  }
+  return matrix;
+}
 
 function createCoordinateMatrix(mapString) {
   let mapStr = mapString;
   const columnCount = mapString.indexOf('\n');
   const rowCount = mapString.match(/\n/g).length + 1;
 
-  const map = [];
-  for (let y = 0; y < rowCount; y += 1) {
-    map[y] = [];
-    for (let x = 0; x < columnCount; x += 1) {
-      map[y][x] = -1;
-    }
-  }
+  const map = createMatrix(rowCount, columnCount);
 
   mapStr = mapStr.replace(/\n/gim, '');
 
@@ -166,9 +170,44 @@ function bfs(startNode, targetY, targetX) {
   return path;
 }
 
-function calculateProfitableCoefficient() {
+/* Создаёт объект коэффициэнтов(выгодность каждого хода) где в свойстве %name% товара
+    хранится объект коэфицциентов для каждого порта */
+function calculateProfitableCoefficient(goodsInPorts, prices, paths) {
+  const result = [];
 
+  goodsInPorts.forEach((good) => {
+    const { name, amount, volume } = good;
+    prices.forEach((portPrices) => {
+      const { portId } = portPrices;
+      Object.keys(portPrices).forEach((keyName) => {
+        if (keyName !== 'portId' && keyName === name) {
+          let maxPerIteration = Math.floor(SHIP_VOLUME / volume);
+          let maxNumberOfIterations = Math.round(amount / maxPerIteration);
+          if (maxNumberOfIterations <= 0) {
+            maxNumberOfIterations = 1;
+          }
+          maxPerIteration = amount < maxPerIteration
+            ? amount
+            : maxPerIteration;
+          const profit = maxPerIteration * portPrices[keyName];
+          /* В путях содержатся отправные точки, но мы не отнимаем их колличество, так как
+           два хода тратятся на загрузку и продажу товара */
+          const coefficient = profit / (paths[portId].length * 2);
+          const innerObject = {};
+          innerObject.portId = portId;
+          innerObject.coefficient = coefficient;
+          innerObject.name = name;
+          innerObject.maxIterations = maxNumberOfIterations;
+          result.push(innerObject);
+        }
+      });
+    });
+  });
 
+  result.sort((a, b) => a.coefficient - b.coefficient);
+  result.reverse();
+
+  return result;
 }
 
 export function startGame(levelMap, gameState) {
@@ -182,7 +221,7 @@ export function startGame(levelMap, gameState) {
     homePort: undefined,
   };
 
-  const { ports } = gameState;
+  const { ports, goodsInPort, prices } = gameState;
   homePort = ports
     .filter((p) => p.isHome)
     .shift();
@@ -197,6 +236,11 @@ export function startGame(levelMap, gameState) {
     const { y } = homePort;
     pathsHomeToPort[port.portId] = bfs(coordinateMatrix[y][x], port.y, port.x);
   });
+
+  profitableCoefficient = calculateProfitableCoefficient(goodsInPort, prices,
+    pathsHomeToPort);
+
+  Object.keys(profitableCoefficient);
 
   console.log(homePort, sellPorts);
   console.log(gameState.prices);
@@ -236,14 +280,22 @@ export function getNextCommand(gameState) {
 
   if (ship.goods.length === 0 && shipState.inHome) {
     const goods = [...gameState.goodsInPort];
-    let goodsCount = Math.floor(SHIP_VOLUME / goods[0].volume);
-    const goodForLoad = goods[0];
+    if (profitableCoefficient[0].maxIterations < 1) {
+      profitableCoefficient = profitableCoefficient.filter((p) => p.name !== profitableCoefficient[0].name);
+    }
+
+    const plannedRoute = profitableCoefficient[0];
+    profitableCoefficient[0].maxIterations -= 1;
+
+    const goodForLoad = goods.find((g) => g.name === plannedRoute.name);
+
+    let goodsCount = Math.floor(SHIP_VOLUME / goodForLoad.volume);
     if (goodForLoad.ammount < goodsCount) {
       goodsCount = goodForLoad.ammount;
     }
     /* Присваеваем закешированный маршрут,убирая первый узел,
        так как это домашний порт. */
-    shipState.route = [...pathsHomeToPort[sellPorts[0].portId]];
+    shipState.route = [...pathsHomeToPort[plannedRoute.portId]];
     shipState.route.shift();
     shipState.moves = true;
     moveCounter += 1;
@@ -252,7 +304,8 @@ export function getNextCommand(gameState) {
   if (shipState.inPort) {
     /* Присваеваем закешированный маршрут и делаем reverse,
        так как нам нужно наоборот вернуться в домашний порт. */
-    shipState.route = [...pathsHomeToPort[sellPorts[0].portId]].reverse();
+    const whatPort = gameState.ports.find((p) => checkShipCoordinates(p.x, p.y));
+    shipState.route = [...pathsHomeToPort[whatPort.portId]].reverse();
     shipState.route.shift();
     shipState.moves = true;
     moveCounter += 1;
