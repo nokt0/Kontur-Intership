@@ -1,4 +1,6 @@
+
 /* eslint-disable no-console */
+
 const LAND = '#';
 const SHIP_VOLUME = 368;
 
@@ -21,6 +23,10 @@ class Node {
 
   add(node) {
     this.children.push(node);
+  }
+
+  setVisited(value) {
+    this.visited = value;
   }
 }
 
@@ -125,7 +131,7 @@ function bfs(startNode, targetY, targetX) {
   function resetVisited() {
     coordinateMatrix.forEach((row) => {
       row.forEach((column) => {
-        column.visited = false;
+        column.setVisited(false);
       });
     });
   }
@@ -133,16 +139,16 @@ function bfs(startNode, targetY, targetX) {
   const collection = [startNode];
   const previousMap = new Map();
 
-  while (collection.length) {
+  while (collection.length !== 0) {
     const node = collection.shift();
 
-    for (const child of node.children) {
+    node.children.forEach((child) => {
       if (child && !child.visited) {
-        child.visited = true;
+        child.setVisited(true);
         collection.push(child);
         previousMap.set(child, node);
       }
-    }
+    });
   }
   previousMap.set(startNode, null);
   const targetNode = coordinateMatrix[targetY][targetX];
