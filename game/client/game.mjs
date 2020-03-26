@@ -1,6 +1,4 @@
-
 /* eslint-disable no-console */
-
 const LAND = '#';
 const SHIP_VOLUME = 368;
 
@@ -172,10 +170,10 @@ function bfs(startNode, targetY, targetX) {
 
 /* Создаёт объект коэффициэнтов(выгодность каждого хода) где в свойстве %name% товара
     хранится объект коэфицциентов для каждого порта */
-function calculateProfitableCoefficient(goodsInPorts, prices, paths) {
+function calculateProfitableCoefficient(goodsInPort, prices, paths) {
   const result = [];
 
-  goodsInPorts.forEach((good) => {
+  goodsInPort.forEach((good) => {
     const { name, amount, volume } = good;
     prices.forEach((portPrices) => {
       const { portId } = portPrices;
@@ -275,13 +273,50 @@ export function getNextCommand(gameState) {
 
   if (shipState.moves) {
     moveCounter += 1;
-    return getShipMove(ship);
+    const { pirates } = gameState;
+    const minRange = pirates.reduce((accumulator, currentValue) => {
+      const range = bfs(coordinateMatrix[ship.y][ship.x], currentValue.y, currentValue.x).length;
+      if (range < accumulator) {
+        return range;
+      }
+      return accumulator;
+    }, Number.MAX_SAFE_INTEGER);
+    const isSameCoordinate = pirates.reduce((accumulator, currentValue) => {
+      if (ship.x === currentValue.x || ship.y === currentValue.y) {
+        return true;
+      }
+      return false;
+    }, false);
+    const isNextNodeDanger = pirates.reduce((accumulator, currentValue) => {
+      if (shipState.route[1] && (((shipState.route[1].x === currentValue.x
+        || shipState.route[1].x === currentValue.x + 1
+        || shipState.route[1].x === currentValue.x - 1)
+        && (shipState.route[1].y === currentValue.y
+        || shipState.route[1].y === currentValue.y + 1
+        || shipState.route[1].y === currentValue.y - 1))
+        || ((shipState.route[1].x === currentValue.x
+        || shipState.route[1].x === currentValue.x + 2
+        || shipState.route[1].x === currentValue.x - 2)
+        && (shipState.route[1].y === currentValue.y
+        || shipState.route[1].y === currentValue.y + 2
+        || shipState.route[1].y === currentValue.y - 2)))) {
+        return true;
+      }
+      return false;
+    }, false);
+
+    if (!isNextNodeDanger) {
+      return getShipMove(ship);
+    }
+    return 'WAIT';
   }
 
   if (ship.goods.length === 0 && shipState.inHome) {
     const goods = [...gameState.goodsInPort];
     if (profitableCoefficient[0].maxIterations < 1) {
-      profitableCoefficient = profitableCoefficient.filter((p) => p.name !== profitableCoefficient[0].name);
+      profitableCoefficient = profitableCoefficient.filter(
+        (p) => p.name !== profitableCoefficient[0].name,
+      );
     }
 
     const plannedRoute = profitableCoefficient[0];
